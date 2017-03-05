@@ -113,6 +113,26 @@ avr_vcd_add_signal(
 		int signal_bit_size,
 		const char * name );
 
+// Alternative to avr_vcd_add_signal: add a trace signal to the vcd file.
+// Must be called before avr_vcd_start()
+int
+avr_vcd_add_signal_idx(
+		avr_vcd_t * vcd,
+		avr_irq_t * signal_irq,
+		int signal_bit_size,
+		const char * name,
+		int *signal_index		// returns an index of our signal assigned by VCD recorder
+		);
+
+// Can remove the signal if we don't need it any more.
+// Must be called after avr_vcd_stop()
+int
+avr_vcd_remove_signal(
+		avr_vcd_t * vcd,
+		avr_irq_t * signal_irq,
+		int signal_index
+		);
+
 // Starts recording the signal value into the file
 int
 avr_vcd_start(

@@ -461,11 +461,13 @@ _avr_vcd_notify(
 }
 
 int
-avr_vcd_add_signal(
+avr_vcd_add_signal_idx(
 		avr_vcd_t * vcd,
 		avr_irq_t * signal_irq,
 		int signal_bit_size,
-		const char * name )
+		const char * name,
+		int *signal_index
+		)
 {
 	if (vcd->signal_count == AVR_VCD_MAX_SIGNALS)
 		return -1;
@@ -488,9 +490,44 @@ avr_vcd_add_signal(
 	avr_irq_register_notify(&s->irq, _avr_vcd_notify, vcd);
 
 	avr_connect_irq(signal_irq, &s->irq);
+	if (signal_index)
+		*signal_index = index;
 	return 0;
 }
 
+int
+avr_vcd_add_signal(
+		avr_vcd_t * vcd,
+		avr_irq_t * signal_irq,
+		int signal_bit_size,
+		const char * name )
+{
+	return avr_vcd_add_signal_idx(vcd, signal_irq, signal_bit_size, name, NULL);
+}
+
+int
+avr_vcd_remove_signal(
+		avr_vcd_t * vcd,
+		avr_irq_t * signal_irq,
+		int signal_index
+		)
+{
+	if (signal_index < 0 || signal_index >= AVR_VCD_MAX_SIGNALS)
+		return -1;
+	if (avr_cycle_timer_status(vcd->avr, _avr_vcd_timer, vcd) > 0)
+		return -1; // prevent removing while the trace is in progress
+	avr_vcd_signal_t * s = &vcd->signal[signal_index];
+
+	if (!s)
+		return -1;
+	if (signal_irq)
+		avr_unconnect_irq(signal_irq, &s->irq);
+	avr_irq_unregister_notify(&s->irq, _avr_vcd_notify, vcd);
+	avr_free_irq(&s->irq, 1);
+	s->irq = NULL;
+
+	return 0;
+}
 
 int
 avr_vcd_start(
