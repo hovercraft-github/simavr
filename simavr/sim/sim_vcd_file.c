@@ -325,11 +325,17 @@ avr_vcd_close(
 	avr_vcd_stop(vcd);
 
 	/* dispose of any link and hooks */
-	for (int i = 0; i < vcd->signal_count; i++) {
+	//for (int i = 0; i < vcd->signal_count; i++) {
+	for (int i = 0; i < AVR_VCD_MAX_SIGNALS; i++) {
+		// Due to avr_vcd_remove_signal usage,
+		// used slots in the signal[] may be not contiguous.
 		avr_vcd_signal_t * s = &vcd->signal[i];
-
-		avr_free_irq(&s->irq, 1);
+		if (s->alias) {
+			avr_free_irq(&s->irq, 1);
+			s->alias = 0;
+		}
 	}
+	vcd->signal_count = 0;
 
 	if (vcd->filename) {
 		free(vcd->filename);
@@ -471,8 +477,18 @@ avr_vcd_add_signal_idx(
 {
 	if (vcd->signal_count == AVR_VCD_MAX_SIGNALS)
 		return -1;
-	int index = vcd->signal_count++;
-	avr_vcd_signal_t * s = &vcd->signal[index];
+	int index; // = vcd->signal_count++;
+	avr_vcd_signal_t * s = NULL; //&vcd->signal[index];
+	for (int i = 0; i < AVR_VCD_MAX_SIGNALS; i++) {
+		// Due to avr_vcd_remove_signal usage,
+		// blanck slots in the signal[] may apear at any index.
+		if (vcd->signal[i].alias == 0) {
+			index = i;
+			s = &vcd->signal[i];
+			vcd->signal_count++;
+			break;
+		}
+	}
 	strncpy(s->name, name, sizeof(s->name));
 	s->size = signal_bit_size;
 	s->alias = ' ' + vcd->signal_count ;
@@ -512,19 +528,21 @@ avr_vcd_remove_signal(
 		int signal_index
 		)
 {
-	if (signal_index < 0 || signal_index >= AVR_VCD_MAX_SIGNALS)
+	if (signal_index < 0 || signal_index >= AVR_VCD_MAX_SIGNALS || !vcd->signal_count)
 		return -1;
 	if (avr_cycle_timer_status(vcd->avr, _avr_vcd_timer, vcd) > 0)
 		return -1; // prevent removing while the trace is in progress
 	avr_vcd_signal_t * s = &vcd->signal[signal_index];
 
-	if (!s)
+	if (!s || !s->alias)
 		return -1;
 	if (signal_irq)
 		avr_unconnect_irq(signal_irq, &s->irq);
 	avr_irq_unregister_notify(&s->irq, _avr_vcd_notify, vcd);
 	avr_free_irq(&s->irq, 1);
-	s->irq = NULL;
+	s->alias = 0;
+
+	vcd->signal_count--;
 
 	return 0;
 }
